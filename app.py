@@ -151,7 +151,7 @@ def upload_file():
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
             file.save(file_path)
             flash('File successfully uploaded')
-            # for now, just redirect back to the form
+            
             return process_file(file_path)
     return render_template('upload.html')
 
