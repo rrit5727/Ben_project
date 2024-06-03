@@ -1,10 +1,16 @@
 from flask import Flask, request, redirect, url_for, send_from_directory, render_template, flash
+import fitz
+from collections import defaultdict
+import pandas as pd
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 UPLOAD_FOLDER = 'uploads'
+OUTPUT_FOLDER = 'output'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 @app.route('/', methods=['GET', 'POST'])
