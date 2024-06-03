@@ -156,19 +156,27 @@ def upload_file():
     return render_template('upload.html')
 
 def process_file(file_path):
-    with fitz.open(file_path) as doc:
-        text = doc[0].get_text()
-    if not "Ship Notice Information" in text:
-        df = get_quantities_by_store_df(file_path)
-        csv_filename = f"quantity-by-store-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
-    else:
-        df = get_packing_by_store_df(file_path)
-        csv_filename = f"packing-by-store-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
+    try:
+        with fitz.open(file_path) as doc:
+            text = doc[0].get_text()
+        if not "Ship Notice Information" in text:
+            df = get_quantities_by_store_df(file_path)
+            csv_filename = f"quantity-by-store-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
+        else:
+            df = get_packing_by_store_df(file_path)
+            csv_filename = f"packing-by-store-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
         
-    csv_path = os.path.join(OUTPUT_FOLDER, csv_filename)
-    df.to_csv(csv_path, index=False)
-    
-    return send_from_directory(directory=OUTPUT_FOLDER, filename=csv_filename, as_attachment=True, path=csv_path)
+        downloads_folder = os.path.expanduser("~") + "/Downloads"
+        csv_path = os.path.join(downloads_folder, csv_filename)
+
+        df.to_csv(csv_path, index=False)
+        
+        return render_template('upload.html')
+    except Exception as e:
+        # Log the error for debugging purposes
+        print(f"An error occurred while processing the file: {e}")
+        # Render the 'upload.html' template to provide feedback to the user
+        return render_template('upload.html')
 
 
 if __name__ == "__main__":
