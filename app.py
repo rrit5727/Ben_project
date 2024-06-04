@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, url_for, send_from_directory, render_template, flash
+from flask import Flask, request, redirect, url_for, send_from_directory, render_template, flash, send_file
 import fitz
 from collections import defaultdict
 import pandas as pd
@@ -166,12 +166,12 @@ def process_file(file_path):
             df = get_packing_by_store_df(file_path)
             csv_filename = f"packing-by-store-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
         
-        downloads_folder = os.path.expanduser("~") + "/Downloads"
-        csv_path = os.path.join(downloads_folder, csv_filename)
+        output_folder = "/tmp"
+        csv_path = os.path.join(output_folder, csv_filename)
 
         df.to_csv(csv_path, index=False)
         
-        return render_template('upload.html')
+        return send_file(csv_path, as_attachment=True, download_name=csv_filename)
     except Exception as e:
         # Log the error for debugging purposes
         print(f"An error occurred while processing the file: {e}")
