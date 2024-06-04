@@ -140,19 +140,32 @@ def get_packing_by_store_df(arg_file):
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
-        if 'file' not in request.files:
+        if 'files[]' not in request.files:
             flash('No file part')
-            return redirect(redirect(request.url))
-        file = request.files['file']
-        if file.filename == '':
+            return redirect(request.url)
+        files = request.files.getlist('files[]')
+        if not files or any(file.filename == '' for file in files):        
             flash('No file selected')
             return redirect(request.url)
-        if file: 
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-            file.save(file_path)
-            flash('File successfully uploaded')
+        if files: 
+            csv_filename = f"consolidated-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
+            output_folder = "/tmp"
+            csv_path = os.path.join(output_folder, csv_filename)
+
+            combined_df = pd.DataFrame()
             
-            return process_file(file_path)
+            for file in files: 
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+                file.save(file_path)
+                flash(f'File {file.filename} successfully uploaded')
+
+                df = process_file(file_path) 
+                if df is not None:
+                    combined_df = pd.concat([combined_df, df], ignore_index=True)
+
+            combined_df.to_csv(csv_path, index=False)
+            
+            return send_file(csv_path, as_attachment=True, download_name=csv_filename)
     return render_template('upload.html')
 
 def process_file(file_path):
@@ -161,22 +174,14 @@ def process_file(file_path):
             text = doc[0].get_text()
         if not "Ship Notice Information" in text:
             df = get_quantities_by_store_df(file_path)
-            csv_filename = f"quantity-by-store-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
         else:
             df = get_packing_by_store_df(file_path)
-            csv_filename = f"packing-by-store-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
-        
-        output_folder = "/tmp"
-        csv_path = os.path.join(output_folder, csv_filename)
-
-        df.to_csv(csv_path, index=False)
-        
-        return send_file(csv_path, as_attachment=True, download_name=csv_filename)
+        return df
     except Exception as e:
         # Log the error for debugging purposes
         print(f"An error occurred while processing the file: {e}")
         # Render the 'upload.html' template to provide feedback to the user
-        return render_template('upload.html')
+        return None
 
 
 if __name__ == "__main__":
