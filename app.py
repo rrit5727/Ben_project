@@ -2,8 +2,11 @@ from flask import Flask, request, redirect, url_for, send_from_directory, render
 import fitz
 from collections import defaultdict
 import pandas as pd
+import glob
 import os
 from datetime import datetime
+import zipfile
+from io import BytesIO
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -148,40 +151,54 @@ def upload_file():
             flash('No file selected')
             return redirect(request.url)
         if files: 
-            csv_filename = f"consolidated-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
+            quantity_filename = f"quantity-by-store-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
+            packing_filename = f"packing-by-store-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.csv"
             output_folder = "/tmp"
-            csv_path = os.path.join(output_folder, csv_filename)
+            quantity_path = os.path.join(output_folder, quantity_filename)
+            packing_path = os.path.join(output_folder, packing_filename)
 
-            combined_df = pd.DataFrame()
+            quantity_df = pd.DataFrame()
+            packing_df = pd.DataFrame()
             
             for file in files: 
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
                 file.save(file_path)
                 flash(f'File {file.filename} successfully uploaded')
 
-                df = process_file(file_path) 
-                if df is not None:
-                    combined_df = pd.concat([combined_df, df], ignore_index=True)
+                if not "Ship Notice Information" in file_path:
+                    df = get_quantities_by_store_df(file_path)
+                    quantity_df = pd.concat([quantity_df, df], ignore_index=True)
+                else:
+                    df = get_packing_by_store_df(file_path)
+                    packing_df = pd.concat([packing_df, df], ignore_index=True)
 
-            combined_df.to_csv(csv_path, index=False)
+            quantity_df.to_csv(quantity_path, index=False)
+            packing_df.to_csv(packing_path, index=False)
             
-            return send_file(csv_path, as_attachment=True, download_name=csv_filename)
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w') as z:
+                z.write(quantity_path, os.path.basename(quantity_path))
+                z.write(packing_path, os.path.basename(packing_path))
+            zip_buffer.seek(0)
+
+            return send_file(zip_buffer, as_attachment=True, download_name=f"output-{datetime.now().strftime('%d.%m.%y.%H.%M.%S')}.zip")
+
     return render_template('upload.html')
 
-def process_file(file_path):
-    try:
-        with fitz.open(file_path) as doc:
+def process_files():
+    os.makedirs('Output', exist_ok = True)
+    store_info = {"quantity-by-store" : [], "packing-by-store" : []}
+    for each_file in glob.glob("Input/*.pdf"):
+        with fitz.open(each_file) as doc:
             text = doc[0].get_text()
         if not "Ship Notice Information" in text:
-            df = get_quantities_by_store_df(file_path)
+            store_info["quantity-by-store"].extend(get_quantities_by_store_df(each_file))
         else:
-            df = get_packing_by_store_df(file_path)
-        return df
-    except Exception as e:
-        # Log the error for debugging purposes
-        print(f"An error occurred while processing the file: {e}")
-        # Render the 'upload.html' template to provide feedback to the user
-        return None
+            store_info["packing-by-store"].extend(get_packing_by_store_df(each_file))
+    store_info = {key : pd.DataFrame(val) for key, val in store_info.items()}
+    run_time = datetime.now().strftime("%d.%m.%y.%H.%M.%S")
+    for key, df in store_info.items():
+        df.to_csv(f"Output/{key}-{run_time}.csv", index = False)
 
 
 if __name__ == "__main__":
