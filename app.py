@@ -12,8 +12,6 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 UPLOAD_FOLDER = 'uploads'
 OUTPUT_FOLDER = 'output'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 def get_sorted_text(arg_box_infos):
@@ -98,6 +96,8 @@ def get_quantities_by_store_df(arg_file):
     df = pd.DataFrame(rows)
     with fitz.open(arg_file) as doc:
         for each_line in get_sorted_text(doc[0].get_text('words')):
+            page_text = doc[0].get_text()  # Extract text from the first page
+            
             if len(set(['Reference', '#:']) & set(each_line)) == 2:
                 df['Purchase Order'] = each_line[-1]
                 break
@@ -109,6 +109,7 @@ def get_packing_by_store_df(arg_file):
     for page in doc:
         lines.extend(get_sorted_text(page.get_text("words")))
     doc.close()
+    
     n, row_data, orders = len(lines), {}, []
     for ind, each_line in enumerate(lines):
         if len(set(['Order', 'Level']) & set(each_line)) == 2 and ind + 3 < n and len(set(['Purchase', 'Order', 'Reference', 'Information', 'Buying', 'Party', 'Customer']) & set(sum([lines[x] for x in range(ind - 3, ind + 7)], []))) == 7:
@@ -165,7 +166,10 @@ def upload_file():
                 file.save(file_path)
                 flash(f'File {file.filename} successfully uploaded')
 
-                if not "Ship Notice Information" in file_path:
+                with fitz.open(file_path) as doc:  # Change: Added to open the file and read the first page's text
+                    text = doc[0].get_text()
+
+                if not "Ship Notice Information" in text:
                     df = get_quantities_by_store_df(file_path)
                     quantity_df = pd.concat([quantity_df, df], ignore_index=True)
                 else:
